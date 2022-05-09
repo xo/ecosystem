@@ -6,7 +6,6 @@ require (
 	github.com/denisenkom/go-mssqldb v0.12.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/goccy/go-yaml v1.9.5
-	github.com/golang/protobuf v1.5.0
 	github.com/kenshaw/inflector v0.2.0
 	github.com/kenshaw/snaker v0.2.0
 	github.com/lib/pq v1.10.4
