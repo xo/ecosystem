@@ -5,18 +5,17 @@ import (
 
 	"github.com/kenshaw/snaker"
 	"github.com/xo/ecosystem/types"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/compiler/protogen"
 )
 
 // ConvertEnum converts the specified protobuf enum to a types enum.
 func (c Converter) ConvertEnum(protoEnum *protogen.Enum) (types.Enum, error) {
-	pkgName := c.PackageNames[protoEnum.Desc.ParentFile().Path()]
+	pkg := c.Packages[protoEnum.Desc.ParentFile().Path()]
 	enumTypeName := snaker.CamelToSnake(string(protoEnum.Desc.Name()))
 	e := types.Enum{
-		Name: pkgName + "_" + enumTypeName,
+		Name: string(pkg.GoPackageName) + "_" + enumTypeName,
 	}
-	if slices.Contains(c.SkipPrefixes, pkgName) {
+	if fileOpts(pkg).SkipPrefix {
 		e.Name = enumTypeName
 	}
 	// Create slice of values.

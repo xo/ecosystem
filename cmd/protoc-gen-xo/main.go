@@ -43,7 +43,6 @@ type xoPlugin struct {
 	templateDir   string
 	templateName  string
 	schema        types.Schema
-	skipPrefixes  []string
 	plugin        *protogen.Plugin
 	queryFile     string
 	protobufNames map[string]typeEntry
@@ -73,11 +72,7 @@ func (x *xoPlugin) Run(p *protogen.Plugin) error {
 
 	files := p.Request.FileToGenerate
 	converter := proto.Converter{
-		SkipPrefixes: x.skipPrefixes,
-		PackageNames: make(map[string]string, len(p.FilesByPath)),
-	}
-	for path, file := range p.FilesByPath {
-		converter.PackageNames[path] = string(file.GoPackageName)
+		Packages: p.FilesByPath,
 	}
 	// Sort p.Files to make the generation deterministic.
 	sort.Slice(p.Files, func(i int, j int) bool {
@@ -89,8 +84,7 @@ func (x *xoPlugin) Run(p *protogen.Plugin) error {
 			continue
 		}
 		for _, msg := range f.Messages {
-			pkgName := string(f.GoPackageName)
-			tables, err := converter.ConvertMessage(pkgName, msg)
+			tables, err := converter.ConvertMessage(f, msg)
 			if err != nil {
 				return err
 			}
@@ -166,8 +160,6 @@ func (x *xoPlugin) ParseParams(params string, target string) ([]string, error) {
 		switch key {
 		case "cpu_profile":
 			x.cpuProfileOutput = value
-		case "skip_prefix":
-			x.skipPrefixes = strings.Split(value, " ")
 		case "src":
 			x.templateDir = value
 		case "template":

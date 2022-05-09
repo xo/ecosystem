@@ -8,14 +8,13 @@ import (
 	"github.com/kenshaw/snaker"
 	pb "github.com/xo/ecosystem/proto/xo"
 	"github.com/xo/ecosystem/types"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 )
 
 // ConvertMessage converts the provided protogen message to xo tables.
 // The first table always represents the actual message.
-func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]types.Table, error) {
+func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]types.Table, error) {
 	// Skip messages with Request or Response as suffix.
 	name := string(msg.Desc.Name())
 	if strings.HasSuffix(name, "Request") || strings.HasSuffix(name, "Response") {
@@ -29,7 +28,7 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 	}
 
 	table := types.NewTable(
-		c.TableName(pkgName, name, true),
+		c.TableName(pkg, name, true),
 		tableOpts.Manual,
 	)
 
@@ -82,11 +81,11 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 		// a different table.
 		path := field.Message.Desc.ParentFile().Path()
 		refType := string(field.Message.Desc.Name())
-		rightTbl := c.TableName(c.PackageNames[path], refType, true)
-		rightTblSingular := c.TableName(c.PackageNames[path], refType, false)
+		rightTbl := c.TableName(c.Packages[path], refType, true)
+		rightTblSingular := c.TableName(c.Packages[path], refType, false)
 		if typ.IsArray {
 			// One-to-many relationship.
-			leftTblSingular := c.TableName(pkgName, name, false)
+			leftTblSingular := c.TableName(pkg, name, false)
 			lookupTable := types.NewRefTable(
 				leftTblSingular+"_"+field.Desc.JSONName()+"_entries",
 				table.Name, leftTblSingular+"_id",
@@ -126,12 +125,13 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 }
 
 // TableName returns the table name of the package and name pair.
-func (c Converter) TableName(pkg string, name string, plural bool) string {
-	pkgSingular := inflector.Singularize(string(pkg))
+func (c Converter) TableName(pkg *protogen.File, name string, plural bool) string {
+	pkgSingular := inflector.Singularize(string(pkg.GoPackageName))
 	pkgTitle := strings.Title(pkgSingular)
 
 	// Prevent pkg_pkg table naming.
-	if slices.Contains(c.SkipPrefixes, pkg) || strings.HasPrefix(name, pkgTitle) {
+	opts := fileOpts(pkg)
+	if opts.SkipPrefix || strings.HasPrefix(name, pkgTitle) {
 		snake := snaker.CamelToSnake(name)
 		if !plural {
 			return snake
@@ -144,6 +144,16 @@ func (c Converter) TableName(pkg string, name string, plural bool) string {
 		suffix = inflector.Pluralize(suffix)
 	}
 	return pkgSingular + "_" + snaker.CamelToSnake(suffix)
+}
+
+func fileOpts(pkg *protogen.File) *pb.FileOverride {
+	if pkg == nil {
+		return &pb.FileOverride{}
+	}
+	if proto.HasExtension(pkg.Desc.Options(), pb.E_FileOverrides) {
+		return proto.GetExtension(pkg.Desc.Options(), pb.E_FileOverrides).(*pb.FileOverride)
+	}
+	return &pb.FileOverride{}
 }
 
 // messageOpts returns the message options of the message or an empty

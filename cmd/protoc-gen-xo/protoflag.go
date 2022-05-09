@@ -61,11 +61,11 @@ func (x *xoPlugin) addMessageType(c proto.Converter, msg *protogen.Message, tbl 
 			fieldPkgName = string(parentFile.GoPackageName)
 			fieldPkgPath = string(parentFile.GoImportPath)
 			typ = v.Message.GoIdent.GoName
-			tblType = c.TableName(fieldPkgName, typ, true)
+			tblType = c.TableName(parentFile, typ, true)
 			embedded = tblFields[v.Desc.JSONName()]
 			// Entries table name.
 			msgName := string(msg.Desc.Name())
-			msgPrefix := c.TableName(pkgName, msgName, false)
+			msgPrefix := c.TableName(file, msgName, false)
 			jsonName := v.Desc.JSONName()
 			linkTable = fmt.Sprintf("%s_%s_entries", msgPrefix, jsonName)
 		default:

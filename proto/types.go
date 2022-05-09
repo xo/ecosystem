@@ -3,7 +3,6 @@ package proto
 import (
 	"github.com/kenshaw/snaker"
 	"github.com/xo/ecosystem/types"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -58,11 +57,11 @@ func (c Converter) goType(field *protogen.Field) (typ types.Type, simple bool) {
 		typ.Type = "[]byte"
 
 	case protoreflect.EnumKind:
-		pkgName := c.PackageNames[field.Enum.Desc.ParentFile().Path()]
+		pkg := c.Packages[field.Enum.Desc.ParentFile().Path()]
 		enumName := snaker.CamelToSnake(string(field.Enum.Desc.Name()))
 		typ.Type = "enum"
-		typ.EnumName = pkgName + "_" + enumName
-		if slices.Contains(c.SkipPrefixes, pkgName) {
+		typ.EnumName = string(pkg.GoPackageName) + "_" + enumName
+		if fileOpts(pkg).SkipPrefix {
 			typ.EnumName = enumName
 		}
 

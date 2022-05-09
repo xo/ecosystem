@@ -1,10 +1,10 @@
 package proto
 
+import "google.golang.org/protobuf/compiler/protogen"
+
 // Converter is a struct containing configuration to convert a parsed protoc
 // file to Go types.
 type Converter struct {
-	// PackageNames maps file paths to the package name of the file.
-	PackageNames map[string]string
-	// SkipPrefixes is a list of prefixes to skip when generating table names.
-	SkipPrefixes []string
+	// Packages maps file paths to the package of the file.
+	Packages map[string]*protogen.File
 }
