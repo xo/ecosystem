@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -29,18 +32,21 @@ var knownTargets = map[string]struct{}{
 }
 
 func main() {
-	plugin := &xoPlugin{}
+	plugin := &xoPlugin{
+		protobufNames: make(map[string]typeEntry),
+	}
 	protogen.Options{}.Run(plugin.Run)
 }
 
 type xoPlugin struct {
-	targets      []string
-	templateDir  string
-	templateName string
-	schema       types.Schema
-	skipPrefixes []string
-	plugin       *protogen.Plugin
-	queryFile    string
+	targets       []string
+	templateDir   string
+	templateName  string
+	schema        types.Schema
+	skipPrefixes  []string
+	plugin        *protogen.Plugin
+	queryFile     string
+	protobufNames map[string]typeEntry
 
 	cpuProfileOutput string
 }
@@ -88,7 +94,12 @@ func (x *xoPlugin) Run(p *protogen.Plugin) error {
 			if err != nil {
 				return err
 			}
+			if len(tables) == 0 {
+				continue
+			}
 			x.schema.Tables = append(x.schema.Tables, tables...)
+			// Add to protobuf name map.
+			x.addMessageType(converter, msg, tables[0])
 		}
 		for _, enum := range f.Enums {
 			goEnum, err := converter.ConvertEnum(enum)
@@ -96,6 +107,8 @@ func (x *xoPlugin) Run(p *protogen.Plugin) error {
 				return err
 			}
 			x.schema.Enums = append(x.schema.Enums, goEnum)
+			// Add to protobuf name map.
+			x.addEnumType(enum, goEnum)
 		}
 	}
 	pkg := pathPackage(files[0])
@@ -131,7 +144,7 @@ func (x *xoPlugin) Run(p *protogen.Plugin) error {
 		}
 		cmd.SetArgs(flags)
 		if err := cmd.Execute(); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("error while executing xo(%q): %w", target, err))
 		}
 	}
 	if errs != nil {
@@ -143,7 +156,7 @@ func (x *xoPlugin) Run(p *protogen.Plugin) error {
 func (x *xoPlugin) ParseParams(params string, target string) ([]string, error) {
 	split := strings.Split(params, ",")
 	var flags []string
-	var emitOk bool
+	var emitOk, pbOk bool
 	for _, param := range split {
 		key, val, _ := strings.Cut(param, "=")
 		value, err := dbTpl(val, target)
@@ -164,15 +177,21 @@ func (x *xoPlugin) ParseParams(params string, target string) ([]string, error) {
 			emitOk = true
 		case "targets":
 			x.targets = strings.Split(value, " ")
+		case "pb-names":
+			pbOk, err = strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("unknown value for pb-names")
+			}
 		case "query":
 			x.queryFile = value
 		case "schema":
 			x.schema.Name = value
 			fallthrough
 		default:
-			flags = append(flags, "--"+key)
 			if value != "" {
-				flags = append(flags, value)
+				flags = append(flags, "--"+key+"="+value)
+			} else {
+				flags = append(flags, "--"+key)
 			}
 		}
 	}
@@ -191,6 +210,15 @@ func (x *xoPlugin) ParseParams(params string, target string) ([]string, error) {
 		return nil, fmt.Errorf("missing required parameters: %v", missing)
 	}
 
+	if pbOk {
+		// Marshal map[string]typeEntry and pass as parameter.
+		val, _ := json.Marshal(x.protobufNames)
+		tplName := x.templateName
+		if tplName == "" {
+			tplName = filepath.Base(x.templateDir)
+		}
+		flags = append(flags, "--"+tplName+"-protobuf", string(val))
+	}
 	return flags, nil
 }
 

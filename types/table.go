@@ -26,9 +26,8 @@ func (s sqlTypeConverter) convertTable(table Table) []xo.Table {
 	}
 	tables := []xo.Table{xoTable}
 	if s.Target != "postgres" {
-		for _, t := range s.genArrayTables(s.id(table.Name), table.Columns) {
-			tables = append(tables, t)
-		}
+		arrayTables := s.genArrayTables(s.id(table.Name), table.Columns)
+		tables = append(tables, arrayTables...)
 	}
 	return tables
 }

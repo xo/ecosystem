@@ -25,7 +25,7 @@ func (c Converter) goType(field *protogen.Field) (typ types.Type, simple bool) {
 		case "google.protobuf.Timestamp":
 			typ.Type = "time"
 		case "google.protobuf.Duration":
-			typ.Type = "int64"
+			typ.Type = "duration"
 		default:
 			// TODO: support gunk field tags.
 			typ.Type = string(field.Desc.Message().FullName())

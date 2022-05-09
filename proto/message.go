@@ -14,6 +14,7 @@ import (
 )
 
 // ConvertMessage converts the provided protogen message to xo tables.
+// The first table always represents the actual message.
 func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]types.Table, error) {
 	// Skip messages with Request or Response as suffix.
 	name := string(msg.Desc.Name())
@@ -28,7 +29,7 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 	}
 
 	table := types.NewTable(
-		c.tableName(pkgName, name, true),
+		c.TableName(pkgName, name, true),
 		tableOpts.Manual,
 	)
 
@@ -81,11 +82,11 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 		// a different table.
 		path := field.Message.Desc.ParentFile().Path()
 		refType := string(field.Message.Desc.Name())
-		rightTbl := c.tableName(c.PackageNames[path], refType, true)
-		rightTblSingular := c.tableName(c.PackageNames[path], refType, false)
+		rightTbl := c.TableName(c.PackageNames[path], refType, true)
+		rightTblSingular := c.TableName(c.PackageNames[path], refType, false)
 		if typ.IsArray {
 			// One-to-many relationship.
-			leftTblSingular := c.tableName(pkgName, name, false)
+			leftTblSingular := c.TableName(pkgName, name, false)
 			lookupTable := types.NewRefTable(
 				leftTblSingular+"_"+field.Desc.JSONName()+"_entries",
 				table.Name, leftTblSingular+"_id",
@@ -99,10 +100,10 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 			Name: field.Desc.JSONName(),
 			Type: types.Type{Type: "int32"},
 		}
-		if field.Name == rightTblSingular {
-			// If the name matches, add the ID suffix to the name.
-			field.Name += "_id"
-		}
+		// if field.Name == rightTblSingular {
+		// 	// If the name matches, add the ID suffix to the name.
+		// 	field.Name += "_id"
+		// }
 		table.Columns = append(table.Columns, field)
 		table.ForeignKeys = append(table.ForeignKeys, types.ForeignKey{
 			Name:     table.Name + "_" + field.Name + "_fkey",
@@ -124,8 +125,8 @@ func (c Converter) ConvertMessage(pkgName string, msg *protogen.Message) ([]type
 	return tables, nil
 }
 
-// tableName returns the table name of the package and name pair.
-func (c Converter) tableName(pkg string, name string, plural bool) string {
+// TableName returns the table name of the package and name pair.
+func (c Converter) TableName(pkg string, name string, plural bool) string {
 	pkgSingular := inflector.Singularize(string(pkg))
 	pkgTitle := strings.Title(pkgSingular)
 
