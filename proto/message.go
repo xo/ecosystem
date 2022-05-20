@@ -61,93 +61,17 @@ func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]
 	}
 
 	// Add message fields.
-	for _, field := range msg.Fields {
-		options := fieldOpts(field)
-		if options.Ignore {
-			continue
-		}
-		msgOpts := messageOpts(field.Message)
-		if options.EmbedAsJson || msgOpts.Ignore || msgOpts.EmbedAsJson {
-			// Embed fields ignored reftypes and those explicitly marked as JSON.
-			col := types.Field{
-				Name: field.Desc.JSONName(),
-				Type: types.Type{Type: "[]byte"},
-			}
-			table.Columns = append(table.Columns, col)
-			continue
-		}
-		typ, resolved, err := c.goType(field)
+	for _, f := range msg.Fields {
+		converted, err := c.ConvertField(f)
 		if err != nil {
 			return nil, err
 		}
-		if resolved {
-			col := types.Field{
-				Name:    field.Desc.JSONName(),
-				Type:    typ,
-				Default: options.DefaultValue,
-			}
-			table.Columns = append(table.Columns, col)
-			// Add unique index if marked in options.
-			idx := options.Index
-			if idx != pb.FieldOverride_NONE {
-				table.Indexes = append(table.Indexes, types.Index{
-					Name:     table.Name + "_" + col.Name + "_idx",
-					Fields:   []types.Field{col},
-					IsUnique: idx == pb.FieldOverride_UNIQUE,
-				})
-			}
-			continue
+		if converted.Field != nil {
+			table.Columns = append(table.Columns, *converted.Field)
 		}
-
-		if options.DefaultValue != "" {
-			return nil, fmt.Errorf(
-				"cannot set default value for type %q in %q",
-				typ.Type, field.Desc.FullName(),
-			)
-		}
-
-		// If resolved is false, the field is not a simple type, and references
-		// a different table.
-		fieldTypeTable, err := c.messageTableName(field.Message, true)
-		if err != nil {
-			return nil, err
-		}
-		fieldTypeSingular, err := c.messageTableName(field.Message, false)
-		if err != nil {
-			return nil, err
-		}
-		if typ.IsArray {
-			// Construct name of table from the name of the reference table.
-			leftSingular := c.TableName(pkg, name, false)
-			fieldName := field.Desc.JSONName()
-			refTableName := fmt.Sprintf("%s_%s_entries", leftSingular, fieldName)
-			// Construct column names.
-			leftCol := leftSingular + "_id"
-			rightCol := fieldTypeSingular + "_id"
-			// Construct the table.
-			lookupTable := types.NewRefTable(refTableName, table.Name, leftCol, fieldTypeTable, rightCol)
-			lookupTables = append(lookupTables, lookupTable)
-			continue
-		}
-		// One-to-one relationship.
-		field := types.Field{
-			Name: field.Desc.JSONName(),
-			Type: types.Type{Type: "int32"},
-		}
-		table.Columns = append(table.Columns, field)
-		table.ForeignKeys = append(table.ForeignKeys, types.ForeignKey{
-			Name:     table.Name + "_" + field.Name + "_fkey",
-			Fields:   []types.Field{field},
-			RefTable: fieldTypeTable,
-			RefFields: []types.Field{
-				{
-					Name:       "id",
-					Type:       types.Type{Type: "int32"},
-					IsPrimary:  true,
-					IsSequence: true,
-				},
-			},
-		})
+		table.Indexes = append(table.Indexes, converted.Indexes...)
+		table.ForeignKeys = append(table.ForeignKeys, converted.ForeignKeys...)
+		lookupTables = append(lookupTables, converted.ExtraTables...)
 	}
 	tables := make([]types.Table, 0, len(lookupTables)+1)
 	tables = append(tables, table)
