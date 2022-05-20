@@ -34,6 +34,32 @@ func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]
 
 	var lookupTables []types.Table
 
+	// Add HasMany entries.
+	for _, hasMany := range tableOpts.HasMany {
+		typ, err := c.searchForType(hasMany.TypeSuffix)
+		if err != nil {
+			return nil, err
+		}
+		rightTable, err := c.messageTableName(typ, true)
+		if err != nil {
+			return nil, err
+		}
+		rightSingular, err := c.messageTableName(typ, false)
+		if err != nil {
+			return nil, err
+		}
+		// Construct name of table from the name of the HasMany.
+		leftSingular := c.TableName(pkg, name, false)
+		hasManyName := snaker.CamelToSnake(hasMany.Name)
+		hasManyTableName := fmt.Sprintf("%s_%s_entries", leftSingular, hasManyName)
+		// Construct column names.
+		leftCol := leftSingular + "_id"
+		rightCol := rightSingular + "_id"
+		// Construct the table.
+		lookupTable := types.NewRefTable(hasManyTableName, table.Name, leftCol, rightTable, rightCol)
+		lookupTables = append(lookupTables, lookupTable)
+	}
+
 	// Add message fields.
 	for _, field := range msg.Fields {
 		options := fieldOpts(field)
@@ -50,7 +76,10 @@ func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]
 			table.Columns = append(table.Columns, col)
 			continue
 		}
-		typ, resolved := c.goType(field)
+		typ, resolved, err := c.goType(field)
+		if err != nil {
+			return nil, err
+		}
 		if resolved {
 			col := types.Field{
 				Name:    field.Desc.JSONName(),
@@ -79,18 +108,24 @@ func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]
 
 		// If resolved is false, the field is not a simple type, and references
 		// a different table.
-		path := field.Message.Desc.ParentFile().Path()
-		refType := string(field.Message.Desc.Name())
-		rightTbl := c.TableName(c.Packages[path], refType, true)
-		rightTblSingular := c.TableName(c.Packages[path], refType, false)
+		fieldTypeTable, err := c.messageTableName(field.Message, true)
+		if err != nil {
+			return nil, err
+		}
+		fieldTypeSingular, err := c.messageTableName(field.Message, false)
+		if err != nil {
+			return nil, err
+		}
 		if typ.IsArray {
-			// One-to-many relationship.
-			leftTblSingular := c.TableName(pkg, name, false)
-			lookupTable := types.NewRefTable(
-				leftTblSingular+"_"+field.Desc.JSONName()+"_entries",
-				table.Name, leftTblSingular+"_id",
-				rightTbl, rightTblSingular+"_id",
-			)
+			// Construct name of table from the name of the reference table.
+			leftSingular := c.TableName(pkg, name, false)
+			fieldName := field.Desc.JSONName()
+			refTableName := fmt.Sprintf("%s_%s_entries", leftSingular, fieldName)
+			// Construct column names.
+			leftCol := leftSingular + "_id"
+			rightCol := fieldTypeSingular + "_id"
+			// Construct the table.
+			lookupTable := types.NewRefTable(refTableName, table.Name, leftCol, fieldTypeTable, rightCol)
 			lookupTables = append(lookupTables, lookupTable)
 			continue
 		}
@@ -99,15 +134,11 @@ func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]
 			Name: field.Desc.JSONName(),
 			Type: types.Type{Type: "int32"},
 		}
-		// if field.Name == rightTblSingular {
-		// 	// If the name matches, add the ID suffix to the name.
-		// 	field.Name += "_id"
-		// }
 		table.Columns = append(table.Columns, field)
 		table.ForeignKeys = append(table.ForeignKeys, types.ForeignKey{
 			Name:     table.Name + "_" + field.Name + "_fkey",
 			Fields:   []types.Field{field},
-			RefTable: rightTbl,
+			RefTable: fieldTypeTable,
 			RefFields: []types.Field{
 				{
 					Name:       "id",
@@ -122,6 +153,16 @@ func (c Converter) ConvertMessage(pkg *protogen.File, msg *protogen.Message) ([]
 	tables = append(tables, table)
 	tables = append(tables, lookupTables...)
 	return tables, nil
+}
+
+// messageTableName is a helper function that returns the table name of the
+// provided message.
+func (c Converter) messageTableName(msg *protogen.Message, plural bool) (string, error) {
+	pkg, err := c.pkgOf(msg.Desc)
+	if err != nil {
+		return "", err
+	}
+	return c.TableName(pkg, string(msg.Desc.Name()), plural), nil
 }
 
 // TableName returns the table name of the package and name pair.
@@ -146,6 +187,8 @@ func (c Converter) TableName(pkg *protogen.File, name string, plural bool) strin
 	return pkgSingular + "_" + snaker.CamelToSnake(suffix)
 }
 
+// fileOpts returns the file options of the file or an empty FileOverride if
+// the message is nil.
 func fileOpts(pkg *protogen.File) *pb.FileOverride {
 	if pkg == nil {
 		return &pb.FileOverride{}
