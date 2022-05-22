@@ -68,6 +68,8 @@ message FieldOverride {
 	string default_value = 4;
 	// The field referenced by the overridden field.
 	Ref ref = 5;
+	// Mark the annotated field as nullable.
+	bool nullable = 6;
 }
 
 // FileOverride is an override of default marshalling behaviour of
