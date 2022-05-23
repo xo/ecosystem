@@ -35,11 +35,9 @@ func (s sqlTypeConverter) sqlType(goType Type) xo.Type {
 		singleTyp.IsArray = true
 		return singleTyp
 	}
-	if s.Target == "sqlserver" && goType.Type == "string" {
-		// Check unique.
-	}
 	t, ok := typeMap[s.Target][goType.Type]
 	if ok {
+		t.Nullable = goType.Nullable
 		return t
 	}
 	if goType.Type != "enum" {
@@ -70,6 +68,7 @@ func (s sqlTypeConverter) buildEnum(goType Type) xo.Type {
 			enumName, maps.Keys(s.Enums),
 		))
 	}
+	typ.Nullable = goType.Nullable
 	return typ
 }
 

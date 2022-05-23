@@ -35,6 +35,7 @@ var wellKnownType = map[protoreflect.FullName]string{
 func (c Converter) goType(field *protogen.Field) (typ types.Type, simple bool, err error) {
 	simple = true
 	typ.IsArray = field.Desc.IsList()
+	typ.Nullable = fieldOpts(field).Nullable
 	if field.Desc.IsMap() {
 		// Protobuf map types will be json encoded when stored.
 		typ := types.Type{
