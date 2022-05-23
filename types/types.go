@@ -81,6 +81,7 @@ type Type struct {
 	Type     string `json:"type,omitempty"`
 	IsArray  bool   `json:"array,omitempty"`
 	EnumName string `json:"enum_name,omitempty"`
+	Nullable bool   `json:"nullable,omitempty"`
 }
 
 // NewTable creates a new table with the specified name. If manual is false, a

@@ -43,6 +43,12 @@ func (c Converter) ConvertField(field *protogen.Field) (*ConvertedField, error) 
 	case basicTypes:
 		return c.convertSimpleFields(field, typ)
 	case typ.IsArray:
+		if typ.Nullable {
+			return nil, fmt.Errorf(
+				"field %q in %q of type array cannot be marked with nullable",
+				field.Desc.Name(), field.Parent.Desc.FullName(),
+			)
+		}
 		return c.convertArrayFields(field, typ)
 	default:
 		return c.convertReferencedFields(field, typ)
@@ -209,7 +215,10 @@ func (c Converter) convertReferencedFields(field *protogen.Field, typ types.Type
 	// One-to-one relationship.
 	col := &types.Field{
 		Name: field.Desc.JSONName(),
-		Type: types.Type{Type: "int32"},
+		Type: types.Type{
+			Type:     "int32",
+			Nullable: typ.Nullable,
+		},
 	}
 	fk := types.ForeignKey{
 		Name:     parentTblName + "_" + col.Name + "_fkey",
